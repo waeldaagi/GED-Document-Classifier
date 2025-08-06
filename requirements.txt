@@ -1,0 +1,9 @@
+python-docx
+pdf2image
+pytesseract
+opencv-python
+joblib
+scikit-learn
+pandas
+matplotlib
+streamlit
