@@ -4,12 +4,43 @@ import cv2
 import joblib
 import os
 import shutil
+import sys
 from pdf2image import convert_from_bytes
 from docx import Document
 from tempfile import NamedTemporaryFile
 import numpy as np
 from PIL import Image, Image as PILImage
 from datetime import datetime
+
+# Import language manager and navigation first (before any usage)
+# Add the parent directory to Python path to find improvements module
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
+# Import language manager first (always needed)
+try:
+    from improvements.language_manager import lang_manager
+except ImportError as e:
+    # Create dummy language manager if import fails
+    class DummyLangManager:
+        def get_text(self, key):
+            return key
+    lang_manager = DummyLangManager()
+
+# Import navigation components
+try:
+    from improvements.navigation import nav_manager, create_navigation_header, render_status_indicator
+except ImportError as e:
+    # Create dummy functions if import fails
+    class DummyNavManager:
+        def render_navigation_sidebar(self, current_app):
+            pass
+    nav_manager = DummyNavManager()
+    def create_navigation_header():
+        pass
+    def render_status_indicator():
+        pass
 
 # ⚙️ CONFIG
 TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -35,7 +66,14 @@ try:
 except:
     st.write("🏢 BFPME")
 
-st.title("📄 GED Document Classifier avec Organisation Automatique")
+st.title("📄 " + lang_manager.get_text("document_classifier"))
+
+# Navigation
+nav_manager.render_navigation_sidebar("📄 Document Classifier")
+
+# Header
+create_navigation_header()
+render_status_indicator()
 
 # 📁 Fonctions d'organisation
 def create_directories():
@@ -105,17 +143,17 @@ def ocr_docx(file):
         return ""
 
 # 🎛️ Options dans la sidebar
-st.sidebar.header("⚙️ Options")
-auto_organize = st.sidebar.checkbox("📁 Organisation automatique", value=True, 
-                                   help="Déplace automatiquement les fichiers vers les dossiers de leur catégorie prédite")
+st.sidebar.header("⚙️ " + lang_manager.get_text("options"))
+auto_organize = st.sidebar.checkbox("📁 " + lang_manager.get_text("auto_organization"), value=True, 
+                                   help=lang_manager.get_text("auto_organization_help"))
 
-show_confidence_warning = st.sidebar.slider("⚠️ Seuil d'avertissement", 
+show_confidence_warning = st.sidebar.slider("⚠️ " + lang_manager.get_text("warning_threshold"), 
                                            min_value=0, max_value=100, value=20,
-                                           help="Affiche un avertissement pour les documents avec confiance < seuil")
+                                           help=lang_manager.get_text("warning_threshold_help"))
 
 # 📊 Affichage de l'arborescence actuelle
-if st.sidebar.button("🗂️ Voir l'arborescence"):
-    st.sidebar.subheader("Structure des dossiers :")
+if st.sidebar.button("🗂️ " + lang_manager.get_text("view_structure")):
+    st.sidebar.subheader(lang_manager.get_text("folder_structure"))
     if os.path.exists(BASE_OUTPUT_DIR):
         for item in os.listdir(BASE_OUTPUT_DIR):
             item_path = os.path.join(BASE_OUTPUT_DIR, item)
@@ -124,10 +162,10 @@ if st.sidebar.button("🗂️ Voir l'arborescence"):
                                 if os.path.isfile(os.path.join(item_path, f))])
                 st.sidebar.write(f"📁 {item} ({file_count} fichiers)")
     else:
-        st.sidebar.write("Aucun dossier créé encore")
+        st.sidebar.write(lang_manager.get_text("no_folders_created"))
 
 # 📤 Interface principale
-uploaded_file = st.file_uploader("📤 Déposez un fichier .pdf, .docx, .jpg, .png :", 
+uploaded_file = st.file_uploader("📤 " + lang_manager.get_text("upload_files"), 
                                  type=["pdf", "docx", "jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
@@ -139,11 +177,11 @@ if uploaded_file is not None:
     # Afficher les informations du fichier
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("📄 Nom", uploaded_file.name)
+        st.metric("📄 " + lang_manager.get_text("file_name"), uploaded_file.name)
     with col2:
-        st.metric("📏 Taille", f"{uploaded_file.size / 1024:.1f} KB")
+        st.metric("📏 " + lang_manager.get_text("file_size"), f"{uploaded_file.size / 1024:.1f} KB")
     with col3:
-        st.metric("🔤 Type", ext.upper())
+        st.metric("🔤 " + lang_manager.get_text("file_type"), ext.upper())
 
     with st.spinner("🔍 Lecture du fichier et extraction OCR..."):
         # Extraction du texte selon le format
@@ -160,15 +198,15 @@ if uploaded_file is not None:
             st.stop()
 
     # Affichage du texte extrait
-    with st.expander("📝 Texte extrait (cliquez pour voir)", expanded=False):
+    with st.expander("📝 " + lang_manager.get_text("extracted_text"), expanded=False):
         if texte.strip():
             st.text_area("Texte", texte, height=200)
         else:
-            st.warning("Aucun texte détecté dans le document")
+            st.warning(lang_manager.get_text("no_text_detected"))
 
     # Classification
     if texte.strip():
-        with st.spinner("🤖 Classification en cours..."):
+        with st.spinner("🤖 " + lang_manager.get_text("classification_in_progress")):
             pred = model.predict([texte])[0]
             proba = max(model.predict_proba([texte])[0]) * 100
         
@@ -183,29 +221,29 @@ if uploaded_file is not None:
             elif proba >= show_confidence_warning:
                 st.info(f"🎯 {proba:.1f}%")
             else:
-                st.warning(f"🎯 {proba:.1f}% (confiance faible)")
+                st.warning(f"🎯 {proba:.1f}% ({lang_manager.get_text('low_confidence')})")
         
         # Organisation automatique
         if auto_organize:
             st.divider()
-            with st.spinner("📁 Organisation du fichier..."):
+            with st.spinner("📁 " + lang_manager.get_text("file_organization")):
                 saved_path = save_and_organize_file(uploaded_file, pred, proba)
                 
                 if saved_path:
                     if proba >= show_confidence_warning:
-                        st.success(f"✅ Fichier classé dans **{pred}** : `{saved_path}`")
+                        st.success(f"✅ {lang_manager.get_text('file_classified')} **{pred}** : `{saved_path}`")
                     else:
-                        st.warning(f"⚠️ Fichier classé dans **{pred}** avec confiance faible : `{saved_path}`")
+                        st.warning(f"⚠️ {lang_manager.get_text('file_classified_low_confidence')} **{pred}** : `{saved_path}`")
                     
                     # Bouton pour ouvrir le dossier
                     folder_path = os.path.dirname(saved_path)
-                    if st.button("🗂️ Ouvrir le dossier"):
+                    if st.button("🗂️ " + lang_manager.get_text("open_folder")):
                         os.startfile(folder_path)  # Windows uniquement
                 else:
-                    st.error("❌ Erreur lors de l'organisation du fichier")
+                    st.error("❌ " + lang_manager.get_text("organization_error"))
         
         # Affichage des probabilités détaillées
-        with st.expander("📈 Probabilités détaillées", expanded=False):
+        with st.expander("📈 " + lang_manager.get_text("detailed_probabilities"), expanded=False):
             all_probas = model.predict_proba([texte])[0]
             classes = model.classes_
             
@@ -214,40 +252,39 @@ if uploaded_file is not None:
                 st.progress(prob_percent / 100, text=f"{classe}: {prob_percent:.1f}%")
     
     else:
-        st.error("❌ Aucun texte lisible détecté dans le document")
+        st.error("❌ " + lang_manager.get_text("no_readable_text"))
         
         # Même si pas de texte, on classe dans "document_vide"
         if auto_organize:
             saved_path = save_and_organize_file(uploaded_file, "document_vide", 0.0)
             if saved_path:
-                st.info(f"📁 Document sans texte classé dans **document_vide** : `{saved_path}`")
+                st.info(f"📁 {lang_manager.get_text('empty_document')} **document_vide** : `{saved_path}`")
 
 # 📋 Instructions
-with st.expander("ℹ️ Instructions d'utilisation", expanded=False):
-    st.markdown("""
-    ### Comment utiliser ce classifieur :
+with st.expander("ℹ️ " + lang_manager.get_text("instructions"), expanded=False):
+    st.markdown(f"""
+    ### {lang_manager.get_text('how_to_use')}
     
-    1. **📤 Upload** : Déposez votre fichier (PDF, DOCX, ou image)
-    2. **🔍 Analyse** : Le système extrait le texte automatiquement
-    3. **🤖 Classification** : L'IA prédit le type de document
-    4. **📁 Organisation** : Le fichier est automatiquement rangé dans le bon dossier
+    1. **{lang_manager.get_text('step_upload')}**
+    2. **{lang_manager.get_text('step_analysis')}**
+    3. **{lang_manager.get_text('step_classification')}**
+    4. **{lang_manager.get_text('step_organization')}**
     
-    ### Structure des dossiers :
-    - `documents_classifies/` : Dossier principal
-        - `[Type_Document]/` : Un dossier par type de document prédit
-        - `document_vide/` : Documents sans texte détecté
-        - `erreur_classification/` : Documents avec erreur de traitement
+    ### {lang_manager.get_text('folder_structure_title')}
+    - `{lang_manager.get_text('main_folder')}`
+        - `{lang_manager.get_text('type_folder')}`
+        - `{lang_manager.get_text('empty_folder')}`
+        - `{lang_manager.get_text('error_folder')}`
     
-    ### Format des noms de fichiers :
-    - `[Confiance%]_AAAAMMJJ_HHMMSS_nom_original.ext`
-    - `[FAIBLE_CONFIANCE_XX%]_...` pour les documents avec confiance < 50%
+    ### {lang_manager.get_text('filename_format')}
+    - `{lang_manager.get_text('confidence_format')}`
+    - `{lang_manager.get_text('low_confidence_format')}`
     
-    ### 📝 Note importante :
-    **Tous les documents sont classés selon la prédiction de l'IA**, peu importe le niveau de confiance.
-    Les fichiers avec faible confiance sont simplement marqués dans le nom de fichier.
+    ### {lang_manager.get_text('important_note')}
+    **{lang_manager.get_text('classification_note')}**
     """)
 
 # 🔄 Bouton de nettoyage
-if st.sidebar.button("🧹 Nettoyer les dossiers temporaires"):
+if st.sidebar.button("🧹 " + lang_manager.get_text("clean_temp")):
     # Code pour nettoyer les fichiers temporaires si nécessaire
-    st.sidebar.success("✅ Nettoyage effectué")
+    st.sidebar.success("✅ " + lang_manager.get_text("cleanup_complete"))
